@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Accès restreint | TW3 Partners</title>
+<link rel="icon" href="/tw3-preview/icon.png">
+<link rel="preload" href="/tw3-preview/fonts/text.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  /* Page de connexion de la preversion (voir build.mjs). Valeurs reprises des
+     jetons de app/globals.css : la page vit hors du build Next. */
+  @font-face {
+    font-family: "Instrument Sans";
+    src: url("/tw3-preview/fonts/text.woff2") format("woff2");
+    font-weight: 400 600;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Montserrat";
+    src: url("/tw3-preview/fonts/logo.woff2") format("woff2");
+    font-weight: 800;
+    font-display: swap;
+  }
+  :root {
+    color-scheme: dark;
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --muted-foreground: oklch(0.75 0 0);
+    --input: oklch(1 0 0 / 16%);
+    --ring: oklch(0.75 0 0);
+    --primary: #fafafa;
+    --primary-foreground: #0a0a0a;
+    --danger: #e08585;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 2rem 1.5rem;
+    background: var(--background);
+    color: var(--foreground);
+    font: 400 1rem/1.5 "Instrument Sans", system-ui, sans-serif;
+  }
+  main { width: 100%; max-width: 22rem; }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    font: 800 0.8125rem/1.05 "Montserrat", "Instrument Sans", system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+  }
+  .logo img { display: block; height: 2.25rem; width: auto; }
+  .logo span span { display: block; }
+  h1 {
+    margin: 2.5rem 0 0;
+    font-size: 1.5rem;
+    line-height: 1.25;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  p { margin: 0.75rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; }
+  form { margin-top: 2rem; }
+  label { display: block; font-size: 0.875rem; font-weight: 500; }
+  input, button {
+    display: block;
+    width: 100%;
+    height: 2.75rem;
+    border-radius: 0.5rem;
+    font: inherit;
+  }
+  input {
+    margin-top: 0.5rem;
+    padding: 0 0.875rem;
+    border: 1px solid var(--input);
+    background: transparent;
+    color: inherit;
+  }
+  input[aria-invalid="true"] { border-color: var(--danger); }
+  button {
+    margin-top: 1rem;
+    border: 0;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; cursor: progress; }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .message { min-height: 1.5rem; margin-top: 1rem; font-size: 0.875rem; }
+  .message[data-error] { color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">
+    <img src="/tw3-preview/logo-tw3-mark.png" alt="" width="260" height="396">
+    <span><span>TW3</span><span>Partners</span></span>
+  </div>
+  <h1>Accès restreint</h1>
+  <p>Version de travail du nouveau site. Saisissez le mot de passe qui vous a été communiqué.</p>
+  <noscript><p>L'ouverture du site nécessite JavaScript.</p></noscript>
+  <form id="form" novalidate>
+    <label for="password">Mot de passe</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" autofocus aria-describedby="message">
+    <button type="submit">Accéder au site</button>
+    <p id="message" class="message" role="status"></p>
+  </form>
+</main>
+<script>
+  const BASE = "/tw3-preview";
+  const ITERATIONS = 600000;
+  const CACHE = "tw3-preview";
+
+  const form = document.getElementById("form");
+  const input = document.getElementById("password");
+  const button = form.querySelector("button");
+  const message = document.getElementById("message");
+
+  function say(text, { error = false, invalid = false } = {}) {
+    message.textContent = text;
+    message.toggleAttribute("data-error", error);
+    input.setAttribute("aria-invalid", String(invalid));
+  }
+
+  function busy(on) {
+    button.disabled = on;
+    button.textContent = on ? "Ouverture…" : "Accéder au site";
+  }
+
+  // Le service worker doit etre actif avant qu'on ecrive dans le cache : un
+  // worker plus recent (nouvelle publication) vide le cache en s'activant.
+  async function ready() {
+    const registration = await navigator.serviceWorker.register(`${BASE}/sw.js`, { scope: `${BASE}/` });
+    await registration.update().catch(() => {});
+    const worker = registration.installing || registration.waiting;
+    if (worker) {
+      await new Promise((resolve, reject) => {
+        const check = () => {
+          if (worker.state === "activated") resolve();
+          else if (worker.state === "redundant") reject(new Error("Service worker abandonne."));
+        };
+        worker.addEventListener("statechange", check);
+        check();
+      });
+    }
+    await navigator.serviceWorker.ready;
+  }
+
+  async function download() {
+    const response = await fetch(`${BASE}/site.bin`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`site.bin : ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  // Format de site.bin : [sel 16][IV 12][chiffre + etiquette GCM]. Renvoie null
+  // si le mot de passe ne dechiffre pas.
+  async function decrypt(sealed, password) {
+    const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: sealed.subarray(0, 16), iterations: ITERATIONS, hash: "SHA-256" },
+      material,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"],
+    );
+    try {
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: sealed.subarray(16, 28) }, key, sealed.subarray(28));
+      return new Uint8Array(plain);
+    } catch {
+      return null;
+    }
+  }
+
+  // Paquet dechiffre : [longueur de l'index sur 4 octets][index JSON][contenus].
+  async function store(plain) {
+    const length = new DataView(plain.buffer, plain.byteOffset).getUint32(0);
+    const index = JSON.parse(new TextDecoder().decode(plain.subarray(4, 4 + length)));
+    const cache = await caches.open(CACHE);
+    let offset = 4 + length;
+    const writes = [];
+    for (const [path, type, size] of index) {
+      const body = plain.subarray(offset, offset + size);
+      offset += size;
+      writes.push(cache.put(BASE + path, new Response(body, { headers: { "content-type": type } })));
+    }
+    await Promise.all(writes);
+  }
+
+  if (!("serviceWorker" in navigator) || !("caches" in window) || !window.crypto?.subtle) {
+    say("Ce navigateur ne permet pas d'ouvrir cette version du site. Ouvrez la page dans une fenêtre normale, hors navigation privée, d'un navigateur récent.", { error: true });
+    input.disabled = true;
+    button.disabled = true;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = input.value.trim();
+    if (!password) {
+      say("Saisissez le mot de passe.", { error: true, invalid: true });
+      input.focus();
+      return;
+    }
+    busy(true);
+    say("");
+    try {
+      const [sealed] = await Promise.all([download(), ready()]);
+      const plain = await decrypt(sealed, password);
+      if (!plain) {
+        busy(false);
+        say("Mot de passe incorrect.", { error: true, invalid: true });
+        input.select();
+        return;
+      }
+      await store(plain);
+      location.reload();
+    } catch (error) {
+      console.error(error);
+      busy(false);
+      say("Le site n'a pas pu être chargé. Vérifiez la connexion et réessayez.", { error: true });
+    }
+  });
+</script>
+</body>
+</html>
